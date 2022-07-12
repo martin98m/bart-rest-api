@@ -1,3 +1,5 @@
+const axios = require('axios');
+const queryString = require('query-string');
 const sharp = require('sharp');
 const multer = require('multer');
 const fs = require('fs');
@@ -137,10 +139,12 @@ app.get('/gallery/:path', (req,res)=>{
     });
 });
 
-app.post("/gallery/:path", upload.single('image'), (req, res)=>{
+app.post("/gallery/:path", checkAuth, upload.single('image'), (req, res)=>{
 
     const {path} = req.params;
     const {name} = req.body;
+
+    const access_token = req.headers.authorization.split(" ")[1];
 
     if(!fs.existsSync("images/" + path)){
         res.status(404).send({
@@ -151,20 +155,22 @@ app.post("/gallery/:path", upload.single('image'), (req, res)=>{
 
     if(req.file){
 
-        new_file_data = {
-            "path": req.file.filename,
-            //uriencoded ?
-            "fullpath": encodeURIComponent(req.file.path.replace("images\\","").replace("\\","/")),
-            //"fullpath": req.file.path.replace("images\\","").replace("\\","/"),
-            "name": name,
-            "modified": new Date()
-        }
-        let db = JSON.parse(fs.readFileSync('images.json'));
-        db[path].images.push(new_file_data);
-        fs.writeFileSync('images.json', JSON.stringify(db));
+        getFacebookUserData(access_token).then((data)=>{
+            new_file_data = {
+                "path": req.file.filename,
+                //uriencoded ?
+                "fullpath": encodeURIComponent(req.file.path.replace("images\\","").replace("\\","/")),
+                //"fullpath": req.file.path.replace("images\\","").replace("\\","/"),
+                "name": data.id+name,
+                "modified": new Date()
+            }
+            let db = JSON.parse(fs.readFileSync('images.json'));
+            db[path].images.push(new_file_data);
+            fs.writeFileSync('images.json', JSON.stringify(db));
 
-        res.status(200).send({
-            "uploaded":[new_file_data]
+            res.status(200).send({
+                "uploaded":[new_file_data]
+            });
         });
     }
     else{
@@ -255,7 +261,63 @@ app.get("/images/:WxH/:path", (req, res) => {
         });
     }
 });
+//FB AUTH
 
+
+const stringifiedParams = queryString.stringify({
+    client_id: 870085713950361,
+    redirect_uri: 'http://localhost:8080/token',
+    scope: ['email'], // comma seperated string
+    response_type: 'token',
+  });
+
+const facebookLoginUrl = `https://www.facebook.com/v14.0/dialog/oauth?${stringifiedParams}`;
+console.log(facebookLoginUrl);
+
+async function getFacebookUserData(token) {
+    const { data } = await axios({
+      url: 'https://graph.facebook.com/me',
+      method: 'get',
+      params: {
+        fields: ['id', 'email', 'first_name', 'last_name'].join(','),
+        access_token: token,
+      },
+    });
+    //console.log(data); // { id, email, first_name, last_name }
+    return data;
+};
+
+function checkAuth(req, res, next){
+    //todo need to check if token is real
+    if(!req.headers.authorization)
+        res.status(400).send(`Access token is missing in header. You can get access token from: ${facebookLoginUrl}`);
+    else
+        next();
+};
+
+app.get('/login',(req,res)=>{
+    res.status(200).send({
+        link: facebookLoginUrl
+    });
+});
+
+//callback for FB oauth
+app.get('/token',(req,res)=>{
+/*
+    //todo needs better strategy
+    const access_token = req.headers.authorization.split(" ")[1];
+
+    console.log(access_token);
+
+    getFacebookUserData(access_token).then((data)=>{
+        console.log(data);
+        res.status(200).sendFile(__dirname +'/image.html');
+    });
+*/
+    res.status(200).send({
+        message:"OK"
+    });
+});
 
 //
 app.listen(
