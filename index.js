@@ -156,10 +156,13 @@ app.post("/gallery/:path", checkAuth, upload.single('filename'), (req, res)=>{
 
     if(req.file){
         getFacebookUserData(access_token).then((data)=>{
+            console.log(req.file.path);
             new_file_data = {
                 "path": req.file.filename,
-                "fullpath": encodeURIComponent(req.file.path.replace("images\\","").replace("\\","/")),
-                "name": data.id+name,
+                //"fullpath": encodeURIComponent(req.file.path.replace("images\\","").replace("\\","/")),
+                //for docker
+                "fullpath": encodeURIComponent(req.file.path.replace("images/","")),
+                "name": data.id +"|" + name,
                 "modified": new Date()
             }
             //todo rename file on disk ?
