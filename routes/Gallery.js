@@ -1,65 +1,10 @@
 const express = require('express');
 const router = express.Router();
 
-const multer = require('multer');
 const fs = require('fs');
 const {body, validationResult} = require('express-validator');
-
-//AUTH
-//checks if access token in header is valid
-function checkAuth(req, res, next){
-    //checks if access token is in header
-    if(req.headers.authorization === undefined){
-        res.status(400).send({
-            message:`Access token is missing in header. You can get access token from: ${facebookLoginUrl}`
-        });
-    }
-    else if(req.headers.authorization.startsWith('Bearer ')){
-        let token = req.headers.authorization.substring(7, req.headers.authorization.length);
-        //checks if access token is valid
-        axios.get(`https://graph.facebook.com/me?access_token=${token}`).then((x)=>{
-            console.log("Auth valid");
-            next();
-        }).catch(x=>{
-            console.log("Authentication failed");
-            res.status(400).send({
-                message:`Access token is not valid. You can get new access token from: ${facebookLoginUrl}`
-            });
-        })
-    }
-    else
-        res.status(400).send({
-            message:`Access token is missing in header. You can get access token from: ${facebookLoginUrl}`
-        });
-};
-
-
-//IMG STORAGE
-const storage = multer.diskStorage({
-    destination: function(req, file, cb){
-        const {path} = req.params;
-        cb(null, './images/' + path + "/");
-    },
-    filename: function(req, file, cb){
-        cb(null, file.originalname);
-    }
-});
-
-const fileFilter = (req, file, cb) =>{
-    const {path} = req.params;
-    if(!fs.existsSync("images/" + path))
-        cb(null,false);
-    else if(file.mimetype === 'image/jpeg' || file.mimetype === 'image/jpg' || file.mimetype === 'image/png'){
-        cb(null, true);
-    }else{
-        cb(null,false);
-    }
-};
-
-var upload = multer({
-    storage:storage,
-    fileFilter:fileFilter
-});
+const upload = require("../modules/ImageStorage").upload;
+const auth = require('../modules/Authentication');
 
 
 //REST GALLERY
@@ -168,7 +113,7 @@ router.get('/:path', (req,res)=>{
 
 //needs access token in authorization header
 //uploads a single image file, images with same filename rewrite each other
-router.post("/:path", checkAuth, upload.single('filename'), (req, res)=>{
+router.post("/:path", auth.checkAuth, upload.single('filename'), (req, res)=>{
 
     //required headers content type
 
@@ -185,7 +130,7 @@ router.post("/:path", checkAuth, upload.single('filename'), (req, res)=>{
     }
 
     if(req.file){
-        getFacebookUserData(access_token).then((data)=>{
+        auth.getFacebookUserData(access_token).then((data)=>{
             console.log(req.file.path);
             new_file_data = {
                 "path": req.file.filename,
