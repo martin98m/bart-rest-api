@@ -10,7 +10,9 @@ const {body, validationResult} = require('express-validator');
 function checkAuth(req, res, next){
     //checks if access token is in header
     if(req.headers.authorization === undefined){
-        res.status(400).send(`Access token is missing in header. You can get access token from: ${facebookLoginUrl}`);
+        res.status(400).send({
+            message:`Access token is missing in header. You can get access token from: ${facebookLoginUrl}`
+        });
     }
     else if(req.headers.authorization.startsWith('Bearer ')){
         let token = req.headers.authorization.substring(7, req.headers.authorization.length);
@@ -20,11 +22,15 @@ function checkAuth(req, res, next){
             next();
         }).catch(x=>{
             console.log("Authentication failed");
-            res.status(400).send(`Access token is not valid. You can get new access token from: ${facebookLoginUrl}`);
+            res.status(400).send({
+                message:`Access token is not valid. You can get new access token from: ${facebookLoginUrl}`
+            });
         })
     }
     else
-        res.status(400).send(`Access token is missing in header. You can get access token from: ${facebookLoginUrl}`);
+        res.status(400).send({
+            message:`Access token is missing in header. You can get access token from: ${facebookLoginUrl}`
+        });
 };
 
 
@@ -74,7 +80,9 @@ router.get('/', (req, res) =>{
             galleries: response_data
         });
     } catch (error){
-        res.status(500).send("Unknown error");
+        res.status(500).send({
+            message: "Unknown error"
+        });
     }
 });
 
@@ -125,11 +133,15 @@ router.post('/',
                 delete new_gallery["images"];
                 res.status(201).send(new_gallery);
             }else{
-                res.status(409).send("Gallery with this name already exists");
+                res.status(409).send({
+                    message: "Gallery with this name already exists"
+                });
             }
 
         } catch (error){
-            res.status(500).send("Unknown error");
+            res.status(500).send({
+                message: "Unknown error"
+            });
         }
 });
 
@@ -166,7 +178,9 @@ router.post("/:path", checkAuth, upload.single('filename'), (req, res)=>{
     const access_token = req.headers.authorization.split(" ")[1];
 
     if(!fs.existsSync("images/" + path)){
-        res.status(404).send("Gallery not found");
+        res.status(404).send({
+            message: "Gallery not found"
+        });
         return;
     }
 
@@ -195,7 +209,9 @@ router.post("/:path", checkAuth, upload.single('filename'), (req, res)=>{
         })
     }
     else{
-        res.status(400).send("Invalid request - file not found");
+        res.status(400).send({
+            message: "Invalid request - file not found"
+        });
     }
 });
 
@@ -204,7 +220,9 @@ router.delete("/:path", (req,res)=>{
 
     try{
         if(!fs.existsSync("images/" + path.split("/")[0]))
-            res.status(404).send("Gallery/photo does not exist");
+            res.status(404).send({
+                message: "Gallery/photo does not exist"
+            });
         else{
             fs.rmSync("images/" + path, { recursive: true, force: true });
 
@@ -222,7 +240,9 @@ router.delete("/:path", (req,res)=>{
                 }
 
                 if(img_del_count === 0){
-                    res.status(404).send("Gallery/photo does not exist");
+                    res.status(404).send({
+                        message: "Gallery/photo does not exist"
+                    });
                     fs.writeFileSync('images.json', JSON.stringify(db));
                     return;
                 }
@@ -233,11 +253,15 @@ router.delete("/:path", (req,res)=>{
             }
 
             fs.writeFileSync('images.json', JSON.stringify(db));
-            res.status(200).send("Gallery/photo was deleted");
+            res.status(200).send({
+                message: "Gallery/photo was deleted"
+            });
         }
     }catch (error){
         console.log(error);
-        res.status(500).send("Unknown error");
+        res.status(500).send({
+            message: "Unknown error"
+        });
     }
 });
 

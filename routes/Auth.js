@@ -40,7 +40,7 @@ router.get('/login',(req,res)=>{
 
 //callback for FB OAuth, access token is un url
 router.get('/token',(req,res)=>{
-    res.status(200).send();
+    res.status(200).send({});
 });
 
 module.exports = router;

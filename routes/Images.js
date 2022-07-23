@@ -24,7 +24,9 @@ router.get("/:WxH/:path", (req, res) => {
     try{
         if(w === h === 0) throw error;
         if(!fs.existsSync("images/" + path))
-            res.status(404).send("Photo not found");
+            res.status(404).send({
+                message: "Photo not found"
+            });
         else{
             //image resize with same aspect ratio if W or H is 0
                 sharp('images/'+ path).resize({width:w, height:h}).toBuffer()
@@ -32,7 +34,9 @@ router.get("/:WxH/:path", (req, res) => {
                     res.status(200).type('png').send(data))
         }
     }catch(error){
-        res.status(500).send("The photo preview can't be generated");
+        res.status(500).send({
+            message: "The photo preview can't be generated"
+        });
     }
 });
 
