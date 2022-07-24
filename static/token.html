@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+    <head></head>
+    <body>
+        <a>Access token:</a><br>
+        <a id="acc_token"></a>
+        <script>
+            let group_name = "access_token";
+            const reg = new RegExp("\\?\\#access_token=(?<" + group_name + ">.*)\\&data_access");
+            let result = reg.exec(document.URL);
+            document.getElementById('acc_token').innerHTML = result.groups[group_name];
+        </script>
+    </body>
+</html>

@@ -5,26 +5,31 @@ const fs = require('fs');
 const {body, validationResult} = require('express-validator');
 const upload = require("../modules/ImageStorage").upload;
 const auth = require('../modules/Authentication');
+const path = require('path');
 
+const gallery_dir = path.join(__dirname + "/../images/");
 
 //REST GALLERY
 router.get('/', (req, res) =>{
 
     try{
-        let db = JSON.parse(fs.readFileSync('images.json'));
 
-        let response_data = []
-        for(let key in db){
-            response_data.push({
-                path: db[key].path,
-                name: db[key].name
+        let response_data = [];
+
+        fs.readdirSync(gallery_dir, {withFileTypes: true})
+            .filter(dirent => dirent.isDirectory())
+            .forEach(dir => {
+                response_data.push({
+                    path: encodeURIComponent(dir.name),
+                    name: dir.name
+                });
             });
-        }
-        //res.setHeader('media-type', 'application/json');
+
         res.status(200).send({
             galleries: response_data
         });
     } catch (error){
+        console.log(error);
         res.status(500).send({
             message: "Unknown error"
         });
@@ -37,6 +42,7 @@ router.post('/',
     body('name').not().contains("/"),
     (req,res)=>{
 
+        //validator
         const errors = validationResult(req);
         if(!errors.isEmpty()){
             return res.status(400).send({
@@ -45,38 +51,15 @@ router.post('/',
         }
 
         try{
-            let gallery_name;
-            //???
-            try{
-                gallery_name = req.body.name;
-            }catch (error){
-                res.status(400).send({
-                    code:400,
-                    payload:{
-                        paths: ["name"],
-                        validator: "required",
-                        example: null
-                    },
-                    name: "INVALID SCHEMA",
-                    description: "Bad JSON object: u'name' is a required property"
-                });
-                return;
-            }
-            //
-            if(!fs.existsSync("images/" + gallery_name)){
-                fs.mkdirSync("images/" + gallery_name);
+            const gallery_name = req.body.name;
 
-                let db = JSON.parse(fs.readFileSync('images.json'));
-                let new_gallery = {
+            if(!fs.existsSync(gallery_dir + gallery_name)){
+                fs.mkdirSync(gallery_dir + gallery_name);
+
+                res.status(201).send({
                     path: encodeURIComponent(gallery_name),
                     name: gallery_name,
-                    images: []
-                }
-                db[gallery_name] = new_gallery;
-
-                fs.writeFileSync('images.json', JSON.stringify(db));
-                delete new_gallery["images"];
-                res.status(201).send(new_gallery);
+                });
             }else{
                 res.status(409).send({
                     message: "Gallery with this name already exists"
@@ -84,6 +67,7 @@ router.post('/',
             }
 
         } catch (error){
+            console.log(error);
             res.status(500).send({
                 message: "Unknown error"
             });
@@ -95,20 +79,24 @@ router.get('/:path', (req,res)=>{
 
     const {path} = req.params;
 
-    let db = JSON.parse(fs.readFileSync('images.json'));
+    let response_data = {
+        gallery:{
+            path:encodeURIComponent(path),
+            name:path
+        },
+        images:[]
+    };
 
-    if(db[path] === undefined)
-        res.status(404).send("Gallery does not exist");
-    else{
-        let response_data = {
-            gallery:{
-                path:db[path].path,
-                name:db[path].name
-            },
-            images: db[path].images
-        }
+    fs.readdirSync(gallery_dir + path, {withFileTypes: true})
+            .forEach(img => {
+                response_data.images.push({
+                    path: img.name,
+                    fullpath: path + "/" + img.name,
+                    name: img.name.split(".")[0],
+                    modified: new Date()
+                });
+            });
         res.status(200).send(response_data);
-    }
 });
 
 //needs access token in authorization header
@@ -120,9 +108,7 @@ router.post("/:path", auth.checkAuth, upload.single('filename'), (req, res)=>{
     const {path} = req.params;
     const {name} = req.body;
 
-    const access_token = req.headers.authorization.split(" ")[1];
-
-    if(!fs.existsSync("images/" + path)){
+    if(!fs.existsSync(gallery_dir + path)){
         res.status(404).send({
             message: "Gallery not found"
         });
@@ -130,28 +116,23 @@ router.post("/:path", auth.checkAuth, upload.single('filename'), (req, res)=>{
     }
 
     if(req.file){
-        auth.getFacebookUserData(access_token).then((data)=>{
-            console.log(req.file.path);
+        //todo, filename with user id
+        console.log(req.file.filename);
+        let new_img = fs.stat(gallery_dir + path + "/" + req.file.filename, (err, data) =>{
+
             new_file_data = {
                 "path": req.file.filename,
                 //"fullpath": encodeURIComponent(req.file.path.replace("images\\","").replace("\\","/")),
                 //for docker
-                "fullpath": encodeURIComponent(req.file.path.replace("images/","")),
-                "name": data.id +"|" + name,
-                "modified": new Date()
-            }
-            //todo rename file on disk ?
-
-            let db = JSON.parse(fs.readFileSync('images.json'));
-            db[path].images.push(new_file_data);
-            fs.writeFileSync('images.json', JSON.stringify(db));
+                "fullpath": req.file.path,
+                "name": name.split(".")[0],
+                "modified": data.ctime
+            };
 
             res.status(200).send({
                 "uploaded":[new_file_data]
             });
-        }).catch(error =>{
-            console.log("ERROR" + error);
-        })
+        });
     }
     else{
         res.status(400).send({
@@ -163,41 +144,15 @@ router.post("/:path", auth.checkAuth, upload.single('filename'), (req, res)=>{
 router.delete("/:path", (req,res)=>{
     const {path} = req.params;
 
+    console.log(path);
     try{
-        if(!fs.existsSync("images/" + path.split("/")[0]))
+        if(!fs.existsSync(gallery_dir + path))
             res.status(404).send({
                 message: "Gallery/photo does not exist"
             });
         else{
-            fs.rmSync("images/" + path, { recursive: true, force: true });
+            fs.rmSync(gallery_dir + path, { recursive: true, force: true });
 
-            let db = JSON.parse(fs.readFileSync('images.json'));
-            const dir_name = path.split("/")[0];
-
-            if(path.indexOf("/")>-1){
-                //remove image
-                let img_del_count = 0;
-                for(let i in db[dir_name].images){
-                    if(db[dir_name].images[i].fullpath === encodeURIComponent(path)){
-                        db[dir_name].images.splice(i, 1);
-                        img_del_count++;
-                    }
-                }
-
-                if(img_del_count === 0){
-                    res.status(404).send({
-                        message: "Gallery/photo does not exist"
-                    });
-                    fs.writeFileSync('images.json', JSON.stringify(db));
-                    return;
-                }
-
-            }else{
-                //remove gallery
-                delete db[path]
-            }
-
-            fs.writeFileSync('images.json', JSON.stringify(db));
             res.status(200).send({
                 message: "Gallery/photo was deleted"
             });
