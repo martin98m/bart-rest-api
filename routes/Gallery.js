@@ -1,168 +1,162 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
 
-const fs = require('fs');
-const {body, validationResult} = require('express-validator');
+const fs = require("fs");
+const { body, validationResult } = require("express-validator");
 const upload = require("../modules/ImageStorage").upload;
-const auth = require('../modules/Authentication');
-const path = require('path');
+const auth = require("../modules/Authentication");
+const path = require("path");
 
 const gallery_dir = path.join(__dirname + "/../images/");
 
 //REST GALLERY
-router.get('/', (req, res) =>{
+router.get("/", (req, res) => {
+  try {
+    let response_data = [];
 
-    try{
-
-        let response_data = [];
-
-        fs.readdirSync(gallery_dir, {withFileTypes: true})
-            .filter(dirent => dirent.isDirectory())
-            .forEach(dir => {
-                response_data.push({
-                    path: encodeURIComponent(dir.name),
-                    name: dir.name
-                });
-            });
-
-        res.status(200).send({
-            galleries: response_data
+    fs.readdirSync(gallery_dir, { withFileTypes: true })
+      .filter((dirent) => dirent.isDirectory())
+      .forEach((dir) => {
+        response_data.push({
+          path: encodeURIComponent(dir.name),
+          name: dir.name,
         });
-    } catch (error){
-        console.log(error);
-        res.status(500).send({
-            message: "Unknown error"
-        });
-    }
+      });
+
+    res.status(200).send({
+      galleries: response_data,
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).send({
+      message: "Unknown error",
+    });
+  }
 });
 
 //todo validator change???
-router.post('/',
-    body('name').isLength({min:1}),
-    body('name').not().contains("/"),
-    (req,res)=>{
+router.post(
+  "/",
+  body("name").isLength({ min: 1 }),
+  body("name").not().contains("/"),
+  (req, res) => {
+    //validator
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).send({
+        errors: errors.array(),
+      });
+    }
 
-        //validator
-        const errors = validationResult(req);
-        if(!errors.isEmpty()){
-            return res.status(400).send({
-                errors: errors.array()
-            });
-        }
+    try {
+      const gallery_name = req.body.name;
 
-        try{
-            const gallery_name = req.body.name;
+      if (!fs.existsSync(gallery_dir + gallery_name)) {
+        fs.mkdirSync(gallery_dir + gallery_name);
 
-            if(!fs.existsSync(gallery_dir + gallery_name)){
-                fs.mkdirSync(gallery_dir + gallery_name);
+        res.status(201).send({
+          path: encodeURIComponent(gallery_name),
+          name: gallery_name,
+        });
+      } else {
+        res.status(409).send({
+          message: "Gallery with this name already exists",
+        });
+      }
+    } catch (error) {
+      console.log(error);
+      res.status(500).send({
+        message: "Unknown error",
+      });
+    }
+  }
+);
 
-                res.status(201).send({
-                    path: encodeURIComponent(gallery_name),
-                    name: gallery_name,
-                });
-            }else{
-                res.status(409).send({
-                    message: "Gallery with this name already exists"
-                });
-            }
+router.get("/:path", (req, res) => {
+  const { path } = req.params;
 
-        } catch (error){
-            console.log(error);
-            res.status(500).send({
-                message: "Unknown error"
-            });
-        }
-});
+  let response_data = {
+    gallery: {
+      path: encodeURIComponent(path),
+      name: path,
+    },
+    images: [],
+  };
 
-
-router.get('/:path', (req,res)=>{
-
-    const {path} = req.params;
-
-    let response_data = {
-        gallery:{
-            path:encodeURIComponent(path),
-            name:path
-        },
-        images:[]
-    };
-
-    fs.readdirSync(gallery_dir + path, {withFileTypes: true})
-            .forEach(img => {
-                response_data.images.push({
-                    path: img.name,
-                    fullpath: path + "/" + img.name,
-                    name: img.name.split(".")[0],
-                    modified: new Date()
-                });
-            });
-        res.status(200).send(response_data);
+  fs.readdirSync(gallery_dir + path, { withFileTypes: true }).forEach((img) => {
+    response_data.images.push({
+      path: img.name,
+      fullpath: path + "/" + img.name,
+      name: img.name.split(".")[0],
+      modified: new Date(),
+    });
+  });
+  res.status(200).send(response_data);
 });
 
 //needs access token in authorization header
 //uploads a single image file, images with same filename rewrite each other
-router.post("/:path", auth.checkAuth, upload.single('filename'), (req, res)=>{
+router.post("/:path", auth.checkAuth, upload.single("filename"), (req, res) => {
+  //required headers content type
 
-    //required headers content type
+  const { path } = req.params;
+  const { name } = req.body;
 
-    const {path} = req.params;
-    const {name} = req.body;
+  if (!fs.existsSync(gallery_dir + path)) {
+    res.status(404).send({
+      message: "Gallery not found",
+    });
+    return;
+  }
 
-    if(!fs.existsSync(gallery_dir + path)){
-        res.status(404).send({
-            message: "Gallery not found"
+  if (req.file) {
+    //todo, filename with user id
+    console.log(req.file.filename);
+    let new_img = fs.stat(
+      gallery_dir + path + "/" + req.file.filename,
+      (err, data) => {
+        new_file_data = {
+          path: req.file.filename,
+          //"fullpath": encodeURIComponent(req.file.path.replace("images\\","").replace("\\","/")),
+          //for docker
+          fullpath: req.file.path,
+          name: name.split(".")[0],
+          modified: data.ctime,
+        };
+
+        res.status(200).send({
+          uploaded: [new_file_data],
         });
-        return;
-    }
-
-    if(req.file){
-        //todo, filename with user id
-        console.log(req.file.filename);
-        let new_img = fs.stat(gallery_dir + path + "/" + req.file.filename, (err, data) =>{
-
-            new_file_data = {
-                "path": req.file.filename,
-                //"fullpath": encodeURIComponent(req.file.path.replace("images\\","").replace("\\","/")),
-                //for docker
-                "fullpath": req.file.path,
-                "name": name.split(".")[0],
-                "modified": data.ctime
-            };
-
-            res.status(200).send({
-                "uploaded":[new_file_data]
-            });
-        });
-    }
-    else{
-        res.status(400).send({
-            message: "Invalid request - file not found"
-        });
-    }
+      }
+    );
+  } else {
+    res.status(400).send({
+      message: "Invalid request - file not found",
+    });
+  }
 });
 
-router.delete("/:path", (req,res)=>{
-    const {path} = req.params;
+router.delete("/:path", (req, res) => {
+  const { path } = req.params;
 
-    console.log(path);
-    try{
-        if(!fs.existsSync(gallery_dir + path))
-            res.status(404).send({
-                message: "Gallery/photo does not exist"
-            });
-        else{
-            fs.rmSync(gallery_dir + path, { recursive: true, force: true });
+  try {
+    if (!fs.existsSync(gallery_dir + path))
+      res.status(404).send({
+        message: "Gallery/photo does not exist",
+      });
+    else {
+      fs.rmSync(gallery_dir + path, { recursive: true, force: true });
 
-            res.status(200).send({
-                message: "Gallery/photo was deleted"
-            });
-        }
-    }catch (error){
-        console.log(error);
-        res.status(500).send({
-            message: "Unknown error"
-        });
+      res.status(200).send({
+        message: "Gallery/photo was deleted",
+      });
     }
+  } catch (error) {
+    console.log(error);
+    res.status(500).send({
+      message: "Unknown error",
+    });
+  }
 });
 
 module.exports = router;
