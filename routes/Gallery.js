@@ -5,9 +5,9 @@ const fs = require("fs");
 const { body, validationResult } = require("express-validator");
 const upload = require("../modules/ImageStorage").upload;
 const auth = require("../modules/Authentication");
-const path = require("path");
+const pathm = require("path");
 
-const gallery_dir = path.join(__dirname + "/../images/");
+const gallery_dir = pathm.join(__dirname + "/../images/");
 
 //REST GALLERY
 router.get("/", (req, res) => {
@@ -83,15 +83,24 @@ router.get("/:path", (req, res) => {
     images: [],
   };
 
-  fs.readdirSync(gallery_dir + path, { withFileTypes: true }).forEach((img) => {
-    response_data.images.push({
-      path: img.name,
-      fullpath: path + "/" + img.name,
-      name: img.name.split(".")[0],
-      modified: new Date(),
-    });
-  });
-  res.status(200).send(response_data);
+  if (!fs.existsSync(gallery_dir + path)) {
+    res.status(404).send({ message: "Gallery does not exist" });
+  } else {
+    fs.readdirSync(gallery_dir + path, { withFileTypes: true })
+      .filter((file) => {
+        return pathm.extname(file.name) !== ".txt";
+      })
+      .forEach((img) => {
+        response_data.images.push({
+          path: img.name,
+          fullpath: encodeURIComponent(path + "/" + img.name),
+          name: img.name.split(".")[0],
+          modified: new Date(),
+        });
+      });
+
+    res.status(200).send(response_data);
+  }
 });
 
 //needs access token in authorization header
@@ -102,6 +111,11 @@ router.post("/:path", auth.checkAuth, upload.single("filename"), (req, res) => {
   const { path } = req.params;
   const { name } = req.body;
 
+  if (!name) {
+    res.status(500).send({ message: "Error, missing name" });
+    return;
+  }
+
   if (!fs.existsSync(gallery_dir + path)) {
     res.status(404).send({
       message: "Gallery not found",
@@ -110,16 +124,12 @@ router.post("/:path", auth.checkAuth, upload.single("filename"), (req, res) => {
   }
 
   if (req.file) {
-    //todo, filename with user id
-    console.log(req.file.filename);
     let new_img = fs.stat(
       gallery_dir + path + "/" + req.file.filename,
       (err, data) => {
         new_file_data = {
           path: req.file.filename,
-          //"fullpath": encodeURIComponent(req.file.path.replace("images\\","").replace("\\","/")),
-          //for docker
-          fullpath: req.file.path,
+          fullpath: encodeURIComponent(path + "/" + req.file.filename),
           name: name.split(".")[0],
           modified: data.ctime,
         };

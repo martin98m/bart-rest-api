@@ -20,14 +20,14 @@ router.get("/:path", (req, res) => {
     let response_data = {
       image: {
         path: encodeURIComponent(path),
-        name: path,
+        name: path.split("/")[1],
       },
       article: "",
       article_encoding: "utf-8",
     };
 
     fs.readFile(
-      gallery_dir + article_name,
+      gallery_dir + file_name,
       { encoding: "utf-8" },
       function (err, data) {
         if (err) res.status(500).send({ message: "ERROR" });
@@ -80,7 +80,7 @@ router.put("/:path", (req, res) => {
         return res.status(500).send({ message: "Could not add article" });
       }
     });
-    res.status(200).send({ message: "Article added" });
+    res.status(200).send({ message: "Article updated" });
   }
 });
 
